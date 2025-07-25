@@ -1,0 +1,1 @@
+from .profiler import pytorch_profiler

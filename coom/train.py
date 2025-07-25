@@ -10,7 +10,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from . import config_classes, model
 
-
 def load_cfg(config_path: str, config_name: str) -> DictConfig:
     """
     Load a Hydra configuration as a native Python dictionary.
@@ -37,7 +36,7 @@ class Trainer:
     and orchestrating the training process.
     """
 
-    def __init__(self, experiment_name, sub_experiment_name, use_wandb=False):
+    def __init__(self, experiment_name, sub_experiment_name, use_wandb=False, profiler=None, profiler_summary=False):
         """
         Initialize the Trainer with experiment and sub-experiment names.
 
@@ -50,6 +49,8 @@ class Trainer:
         self.sub_experiment_name = sub_experiment_name
         self.config_base_path = "./../coom/configs"
         self.use_wandb = use_wandb  # Will be used in the future.
+        self.profiler = profiler
+        self.profiler_summary = profiler_summary
 
         # Configuration containers
         self.main_cfg = None
@@ -146,12 +147,15 @@ class Trainer:
 
         strategy = nl.MegatronStrategy(**self.trainer_cfg["strategy"])
 
+        profiler = self.profiler
+
         self.trainer = nl.Trainer(
             devices=self.trainer_cfg["devices"],
             max_steps=self.trainer_cfg["max_steps"],
             accelerator=self.trainer_cfg["accelerator"],
             strategy=strategy,
             plugins=nl.MegatronMixedPrecision(precision=self.trainer_cfg["precision"]),
+            profiler=profiler
         )
 
         print("Trainer initialized successfully!")
@@ -235,6 +239,9 @@ class Trainer:
         """
         self.initialize_all_components()
         self.start_training()
+        if self.trainer and self.trainer.profiler and self.profiler_summary:
+            print("\n=== Profiler Summary ===")
+            print(self.trainer.profiler.summary())
 
     def get_config_summary(self):
         """

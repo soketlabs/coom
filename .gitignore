@@ -5,3 +5,4 @@
 
 ckpt/
 test_logdir/
+profiler_logs/
