@@ -5,3 +5,7 @@
 
 ckpt/
 test_logdir/
+msc:
+*.bin
+*.idx
+profiler_logs

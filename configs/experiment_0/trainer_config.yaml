@@ -7,5 +7,5 @@ defaults:
 max_steps: 100
 
 strategy:
-  pipeline_model_parallel_size: 2
+  pipeline_model_parallel_size: 1
 # add more as required

@@ -6,3 +6,4 @@ defaults:
 # make sure _self_ is in the end as it means to inherent last from this file meaning overwriting the inhereted values if needed
 
 #CHANGE THE ARGUMENTS BELOW
+data_model : EKAPreTrainingDataModule

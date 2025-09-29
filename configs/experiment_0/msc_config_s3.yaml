@@ -1,0 +1,14 @@
+profiles:
+  my_test_data:
+    storage_provider:
+      type: s3
+      options:
+        region_name: auto
+        base_path: test-data-gpt
+        endpoint_url: ***
+    credentials_provider:
+      type: S3Credentials
+      options:
+        access_key: ***
+        secret_key: ***
+  

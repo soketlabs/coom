@@ -1,0 +1,7 @@
+profiles:
+  my_test_data:
+    storage_provider:
+      type: ais
+      options:
+        endpoint: http://localhost:8080
+        base_path: test-data-gpt

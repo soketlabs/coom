@@ -1,9 +1,7 @@
 devices: 2
 max_steps: 50
 accelerator: "gpu"
-precision: "bf16-mixed"
 
 strategy:
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
-  pipeline_dtype: "bfloat16"

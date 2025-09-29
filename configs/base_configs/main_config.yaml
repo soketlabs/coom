@@ -5,7 +5,7 @@ base_model: EKAModel
 base_model_config: EKAConfig
 base_model_configuration_path: base_model_config.yaml
 
-dataLoader_config_path: dataLoader_config.yaml
+dataLoader_config_path: dataModule_config.yaml
 optimizer_config_path: optimizer_config.yaml
 trainer_config_path: trainer_config.yaml
 logger_config_path: logger_config.yaml
