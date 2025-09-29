@@ -4,3 +4,4 @@ vocab_size : 50257
 micro_batch_size : 4
 num_workers : 32
 num_microbatches : 4
+dataModuleType : Mock

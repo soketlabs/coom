@@ -1,1 +1,1 @@
-from .profiler import pytorch_profiler
+from .eka_profiler import EKAProfiler

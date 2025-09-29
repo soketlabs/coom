@@ -7,3 +7,5 @@ defaults:
 
 #CHANGE THE ARGUMENTS BELOW
 data_model : EKAPreTrainingDataModule
+profiler_config_path : profiler_config.yaml
+callback_config_path : callback_config.yaml

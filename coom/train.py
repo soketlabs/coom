@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import importlib
 
 from hydra import compose, initialize_config_dir
 # from lightning.pytorch.loggers import WandbLogger
@@ -8,7 +9,8 @@ from nemo import lightning as nl
 from nemo.collections import llm
 from omegaconf import DictConfig, OmegaConf
 
-from coom import config_classes, model, data_module
+from coom import config_classes, model, data_module, profiler
+from coom.data_module.load_and_validate_paths import load_data_paths
 
 
 def load_cfg(config_path: str, config_name: str) -> DictConfig:
@@ -37,7 +39,7 @@ class Trainer:
     and orchestrating the training process.
     """
 
-    def __init__(self, experiment_name, sub_experiment_name, use_wandb=False, profiler=None, profiler_summary=False):
+    def __init__(self, experiment_name, sub_experiment_name, use_wandb=False):
         """
         Initialize the Trainer with experiment and sub-experiment names.
 
@@ -50,8 +52,6 @@ class Trainer:
         self.sub_experiment_name = sub_experiment_name
         self.config_base_path = "./../coom/configs"
         self.use_wandb = use_wandb  # Will be used in the future.
-        self.profiler = profiler
-        self.profiler_summary = profiler_summary
 
         # Configuration containers
         self.main_cfg = None
@@ -60,6 +60,8 @@ class Trainer:
         self.opt_cfg = None
         self.trainer_cfg = None
         self.logger_cfg = None
+        self.profiler_cfg = None
+        self.callback_cfg = None
 
         # Component containers
         self.model = None
@@ -67,6 +69,8 @@ class Trainer:
         self.trainer = None
         self.logger = None
         self.optimizer = None
+        self.profiler = None
+        self.callbacks = []
 
         self.load_configurations()
 
@@ -81,16 +85,112 @@ class Trainer:
 
         prefix = self.main_cfg["config_path_prefix"]
 
-        def full_path(key):
-            return f"{self.experiment_name}{os.path.join(prefix, self.main_cfg[key])}"
+        def full_path(config, key):
+            return f"{self.experiment_name}{os.path.join(prefix, config[key])}"
 
-        self.model_cfg = load_cfg(self.config_base_path, full_path("base_model_configuration_path"))[self.experiment_name]
-        self.data_cfg = load_cfg(self.config_base_path, full_path("dataLoader_config_path"))[self.experiment_name]
-        self.opt_cfg = load_cfg(self.config_base_path, full_path("optimizer_config_path"))[self.experiment_name]
-        self.trainer_cfg = load_cfg(self.config_base_path, full_path("trainer_config_path"))[self.experiment_name]
-        self.logger_cfg = load_cfg(self.config_base_path, full_path("logger_config_path"))[self.experiment_name]
+        self.model_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "base_model_configuration_path"))[self.experiment_name]
+        self.data_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "dataLoader_config_path"))[self.experiment_name]
+        self.opt_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "optimizer_config_path"))[self.experiment_name]
+        self.trainer_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "trainer_config_path"))[self.experiment_name]
+        self.logger_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "logger_config_path"))[self.experiment_name]
+        self.profiler_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "profiler_config_path"))[self.experiment_name]
+        self.data_paths_cfg = load_cfg(self.config_base_path, full_path(self.data_cfg, "data_paths_config_file"))[self.experiment_name]
+
+        # Load callback configuration if specified
+        if "callback_config_path" in self.main_cfg:
+            self.callback_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "callback_config_path"))[self.experiment_name]
 
         print("All configurations loaded successfully!")
+
+    def initialize_callbacks(self):
+        """
+        Initialize callbacks based on the callback configuration.
+
+        Expected callback_cfg structure:
+        {
+            "callbacks": [
+                {
+                    "class_name": "ModelCheckpoint",
+                    "module_path": "nemo.lightning.pytorch.callbacks",
+                    "parameters": {
+                        "dirpath": "checkpoints/",
+                        "filename": "{epoch}-{step}",
+                        "save_top_k": 3,
+                        "monitor": "val_loss"
+                    }
+                },
+                {
+                    "class_name": "EarlyStopping",
+                    "module_path": "nemo.lightning.pytorch.callbacks",
+                    "parameters": {
+                        "monitor": "val_loss",
+                        "patience": 10,
+                        "mode": "min"
+                    }
+                }
+            ]
+        }
+        """
+        self.callbacks = []
+
+        if self.callback_cfg is None or "callbacks" not in self.callback_cfg:
+            print("No callback configuration found or callbacks section missing.")
+            return
+
+        print("Initializing callbacks...")
+
+        for callback_config in self.callback_cfg["callbacks"]:
+            try:
+                # Extract callback information
+                class_name = callback_config["class_name"]
+                module_path = callback_config["module_path"]
+                parameters = callback_config.get("parameters", {})
+
+                # Dynamically import the module
+                module = importlib.import_module(module_path)
+
+                # Get the callback class
+                callback_class = getattr(module, class_name)
+
+                # Create callback instance with parameters
+                callback_instance = callback_class(**parameters)
+
+                # Add to callbacks list
+                self.callbacks.append(callback_instance)
+
+                print(f"Successfully initialized callback: {class_name}")
+
+            except Exception as e:
+                print(f"Error initializing callback {callback_config.get('class_name', 'Unknown')}: {str(e)}")
+                continue
+
+        print(f"Initialized {len(self.callbacks)} callbacks successfully!")
+
+    def initialize_profiler(self):
+        """
+        Initialize the profiler based on configuration.
+        """
+        if not self.profiler_cfg["enable_profiler"]:
+            self.profiler = None
+            print("Profiler disabled.")
+            return
+
+        print("Initializing profiler with configuration...")
+
+        if self.sub_experiment_name is not None:
+            profiler_dir = os.path.join("profiler_logs", self.experiment_name, self.sub_experiment_name)
+        else:
+            profiler_dir = os.path.join("profiler_logs", self.experiment_name)
+
+        os.makedirs(profiler_dir, exist_ok=True)
+
+        self.profiler = profiler.EKAProfiler(
+            start_step=self.profiler_cfg["start_step"],
+            end_step=self.profiler_cfg["end_step"],
+            warmup_steps=self.profiler_cfg["warmup_steps"],
+            active_steps=self.profiler_cfg["active_steps"],
+            trace_dir=profiler_dir
+        )
 
     def initialize_model(self):
         """
@@ -99,16 +199,16 @@ class Trainer:
         if self.main_cfg is None:
             raise ValueError("Main configuration not loaded. Call load_configurations() first.")
 
-        ModelClass = getattr(model, self.main_cfg["base_model"])
-        ConfigClass = getattr(config_classes, self.main_cfg["base_model_config"])
+        model_class = getattr(model, self.main_cfg["base_model"])
+        config_class = getattr(config_classes, self.main_cfg["base_model_config"])
 
-        model_config = ConfigClass(
+        model_config = config_class(
             **{
                 **self.model_cfg,
                 "seq_length": self.data_cfg["seq_length"],
                 "vocab_size": self.data_cfg["vocab_size"],
             })
-        self.model = ModelClass(model_config)
+        self.model = model_class(model_config)
 
         print(f"Model {self.main_cfg['base_model']} initialized successfully!")
 
@@ -117,7 +217,7 @@ class Trainer:
         Initialize the data module based on configuration.
 
         Args:
-            data_module_type (str): "Mock" (currently only supported option)
+            data_module_type (str): "Mock" or "Real"
         """
         if self.data_cfg is None:
             raise ValueError("Data configuration not loaded. Call load_configurations() first.")
@@ -129,19 +229,21 @@ class Trainer:
             )
         elif data_module_type == "Real":
             if self.data_cfg["streaming"]:
-                os.environ["MSC_CONFIG"] = self.data_cfg["msc_config"]
-            DataModuleClass = getattr(data_module, self.main_cfg["data_model"])
-            self.data_module = DataModuleClass(
-                # paths=["/home/shadeform/coom/trial_data_text_document"],
-                paths=self.data_cfg["data_paths"],
+                os.environ["MSC_CONFIG"] = os.path.join(self.config_base_path, f"{self.experiment_name}{os.path.join(self.main_cfg['config_path_prefix'], self.data_cfg['msc_config'])}")
+
+            processed_paths = load_data_paths(self.data_paths_cfg)
+
+            datamodule_class = getattr(data_module, self.main_cfg["data_model"])
+            self.data_module = datamodule_class(
+                paths=processed_paths,
                 seq_length=self.data_cfg["seq_length"],
                 micro_batch_size=self.data_cfg["micro_batch_size"],
                 global_batch_size=self.data_cfg["global_batch_size"],
-                object_storage_cache_path = self.data_cfg["object_storage_cache_path"],
-                mmap_bin_files = not(self.data_cfg["streaming"]) # basically True if not streaming otherwise false
+                object_storage_cache_path=self.data_cfg["object_storage_cache_path"],
+                mmap_bin_files=not self.data_cfg["streaming"]
             )
 
-        print("Data module initialized successfully!")
+    print("Data module initialized successfully!")
 
     def initialize_optimizer(self):
         """
@@ -164,19 +266,19 @@ class Trainer:
 
         strategy = nl.MegatronStrategy(**self.trainer_cfg["strategy"])
 
-        profiler = self.profiler
+        # Combine all callbacks (profiler + configured callbacks)
+        all_callbacks = []
+        if self.profiler is not None:
+            all_callbacks.append(self.profiler)
+        all_callbacks.extend(self.callbacks)
 
         self.trainer = nl.Trainer(
-            # num_sanity_val_steps = 0,
-            # limit_val_batches = 2,
-            # accumulate_grad_batches= 4,
-            # num_microbatches = 4,
             devices=self.trainer_cfg["devices"],
             max_steps=self.trainer_cfg["max_steps"],
             accelerator=self.trainer_cfg["accelerator"],
             strategy=strategy,
-            profiler=profiler
-            profiler=profiler
+            callbacks=all_callbacks,
+            plugins=nl.MegatronMixedPrecision(precision=self.trainer_cfg["precision"]),
             limit_val_batches=0,
         )
 
@@ -190,9 +292,8 @@ class Trainer:
             raise ValueError("Logger configuration not loaded. Call load_configurations() first.")
 
         self.logger = nl.NeMoLogger(
-            log_dir=self.logger_cfg["log_dir"],
+            log_dir=os.path.join(self.logger_cfg["log_dir"], self.experiment_name, self.sub_experiment_name),
             update_logger_directory=True,
-            name=self.sub_experiment_name,
             use_datetime_version=False,
         )
 
@@ -202,7 +303,9 @@ class Trainer:
         """
         Initialize all components required for training.
         """
-        
+
+        self.initialize_profiler()
+        self.initialize_callbacks()
         self.initialize_model()
         self.initialize_data_module(data_module_type=self.data_cfg["dataModuleType"])
         self.initialize_optimizer()
@@ -243,9 +346,6 @@ class Trainer:
         self.validate_components()
 
         print("Starting training...")
-        # from torch.distributed import is_initialized, get_rank
-        # rank = get_rank() if is_initialized() else 0
-        # self.data_module.data_sampler_mock.setup(rank)
 
         llm.train(
             model=self.model,
@@ -264,9 +364,6 @@ class Trainer:
         """
         self.initialize_all_components()
         self.start_training()
-        if self.trainer and self.trainer.profiler and self.profiler_summary:
-            print("\n=== Profiler Summary ===")
-            print(self.trainer.profiler.summary())
 
     def get_config_summary(self):
         """
@@ -287,4 +384,5 @@ class Trainer:
             "seq_length": self.data_cfg.get("seq_length") if self.data_cfg else None,
             "global_batch_size": self.data_cfg.get("global_batch_size") if self.data_cfg else None,
             "log_dir": self.logger_cfg.get("log_dir") if self.logger_cfg else None,
+            "num_callbacks": len(self.callbacks),
         }
