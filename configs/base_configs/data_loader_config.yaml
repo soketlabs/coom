@@ -1,0 +1,15 @@
+seq_length: 2048
+global_batch_size: 16
+vocab_size : 50257
+micro_batch_size : 4
+num_workers : 32
+num_microbatches : 4
+
+# make sure _self_ is in the end as it means to inherent last from this file meaning overwriting the inhereted values if needed
+
+# add more as required
+dataModuleType : Real # can  be Mock or Real as of now.
+msc_config : "msc_config_s3.yaml"
+data_paths_config_file: "data_paths_config.yaml"
+object_storage_cache_path : "../object_storage_cache"
+streaming : True # has to True or False

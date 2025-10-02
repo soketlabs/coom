@@ -15,7 +15,7 @@ class EKAModel(GPTModel):
         fp16_lm_cross_entropy: bool = False,
         parallel_output: bool = True,
         share_embeddings_and_output_weights: bool = False,
-        position_embedding_type: Literal['learned_absolute', 'rope'] = 'learned_absolute',
+        position_embedding_type: Literal['learned_absolute', 'rope'] = 'rope',
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
         rope_scaling: bool = False,

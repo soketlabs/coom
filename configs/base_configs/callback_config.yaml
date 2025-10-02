@@ -1,0 +1,5 @@
+callbacks:
+  - class_name: "OptimizerMonitor"
+    module_path: "nemo.lightning.pytorch.callbacks"
+    parameters:
+  

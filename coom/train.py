@@ -1,15 +1,16 @@
+import importlib
 import os
 from pathlib import Path
-import importlib
 
 from hydra import compose, initialize_config_dir
+
 # from lightning.pytorch.loggers import WandbLogger
 from megatron.core.optimizer import OptimizerConfig
 from nemo import lightning as nl
 from nemo.collections import llm
 from omegaconf import DictConfig, OmegaConf
 
-from coom import config_classes, model, data_module, profiler
+from coom import config_classes, data_module, model, profiler
 from coom.data_module.load_and_validate_paths import load_data_paths
 
 
@@ -89,7 +90,7 @@ class Trainer:
             return f"{self.experiment_name}{os.path.join(prefix, config[key])}"
 
         self.model_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "base_model_configuration_path"))[self.experiment_name]
-        self.data_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "dataLoader_config_path"))[self.experiment_name]
+        self.data_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "data_loader_config_path"))[self.experiment_name]
         self.opt_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "optimizer_config_path"))[self.experiment_name]
         self.trainer_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "trainer_config_path"))[self.experiment_name]
         self.logger_cfg = load_cfg(self.config_base_path, full_path(self.main_cfg, "logger_config_path"))[self.experiment_name]
@@ -239,8 +240,8 @@ class Trainer:
                 seq_length=self.data_cfg["seq_length"],
                 micro_batch_size=self.data_cfg["micro_batch_size"],
                 global_batch_size=self.data_cfg["global_batch_size"],
-                object_storage_cache_path=self.data_cfg["object_storage_cache_path"],
-                mmap_bin_files=not self.data_cfg["streaming"]
+                # object_storage_cache_path=self.data_cfg["object_storage_cache_path"],
+                # mmap_bin_files=not self.data_cfg["streaming"]
             )
 
     print("Data module initialized successfully!")

@@ -5,10 +5,15 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "datasets>=3.3.2",
-    "numpy>=2.2.3",
-    "pytest>=8.3.4",
-    "torch>=2.6.0",
+    "click>=8.3.0",
+    "datasets>=4.1.1",
+    "lightning>=2.5.5",
+    "megatron-core==0.15.0rc6",
+    "packaging>=25.0",
+    "pyyaml>=6.0.3",
+    "regex>=2025.9.18",
+    "six>=1.17.0",
+    "transformers>=4.56.2",
 ]
 
 [tool.uv]

@@ -7,8 +7,9 @@ the async checkpoint save calls.
 import logging
 
 from megatron.core.dist_checkpointing.strategies.async_utils import AsyncCallsQueue, AsyncRequest
-from . import get_args
-from .utils import print_rank_0
+from megatron.core.dist_checkpointing.strategies.filesystem_async import _results_queue
+from coom.training import get_args
+from coom.training.utils import print_rank_0
 
 logger = logging.getLogger(__name__)
 
@@ -63,3 +64,15 @@ def is_empty_async_queue() -> bool:
         bool: True if there is any ongoing async call.
     """
     return _async_calls_queue.get_num_unfinalized_calls() == 0
+
+
+def reset_persistent_async_worker():
+    global _async_calls_queue, _results_queue
+    if _async_calls_queue is not None:
+        _async_calls_queue.close(abort=True)
+        del _async_calls_queue
+    if _results_queue is not None:
+        _results_queue._manager.shutdown()
+        del _results_queue
+    _results_queue = None
+    _async_calls_queue = None

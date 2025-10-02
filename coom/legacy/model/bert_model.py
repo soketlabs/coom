@@ -12,9 +12,7 @@ from coom.legacy.model.language_model import get_language_model
 from coom.legacy.model.utils import get_norm
 from coom.legacy.model.utils import openai_gelu, erf_gelu
 from coom.legacy.model.utils import get_linear_layer
-from coom.legacy.model.utils import init_method_normal
-from coom.legacy.model.utils import scaled_init_method_normal
-from coom.legacy.model.module import MegatronModule
+from .module import MegatronModule
 
 
 def bert_extended_attention_mask(attention_mask):
@@ -173,7 +171,7 @@ class BertModel(MegatronModule):
         self.language_model.set_input_tensor(input_tensor)
 
     def forward(self, bert_model_input, attention_mask,
-                tokentype_ids=None, lm_labels=None):
+                tokentype_ids=None, lm_labels=None, inference_context=None):
 
         extended_attention_mask = bert_extended_attention_mask(attention_mask)
         input_ids = bert_model_input

@@ -10,8 +10,9 @@ def init_distributed(
     parallel_state.destroy_model_parallel()
 
     # Torch setup
-    rank = int(os.getenv("LOCAL_RANK"))
+    rank = int(os.getenv("LOCAL_RANK", 0))
     world_size = torch.cuda.device_count()
+    print(f'rank: {rank}, world_size: {world_size}')
     torch.cuda.set_device(rank)
     torch.distributed.init_process_group(world_size=world_size, rank=rank)
 

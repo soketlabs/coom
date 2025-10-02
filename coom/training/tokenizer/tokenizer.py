@@ -5,16 +5,15 @@
 import base64
 import json
 import math
-import types
-from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+from megatron.core.datasets.megatron_tokenizer import MegatronLegacyTokenizer
 
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
 from .gpt2_tokenization import GPT2Tokenizer
-from .multimodal_tokenizer import MultimodalTokenizer
+from coom.training.tokenizer.multimodal_tokenizer import MultimodalTokenizer
+from coom.training.tokenizer.sft_tokenizer import SFTTokenizer
 
 
 def build_tokenizer(args, **kwargs):
@@ -46,7 +45,9 @@ def build_tokenizer(args, **kwargs):
         assert args.tokenizer_model is not None
         tokenizer = _GPTSentencePieceTokenizer(args.tokenizer_model)
     elif args.tokenizer_type == 'HuggingFaceTokenizer':
-        tokenizer = _HuggingFaceTokenizer(args.tokenizer_model, **kwargs)
+        tokenizer = _HuggingFaceTokenizer(
+            args.tokenizer_model, trust_remote_code = args.trust_remote_code, **kwargs,
+        )
     elif args.tokenizer_type == 'Llama2Tokenizer':
         assert args.tokenizer_model is not None
         tokenizer = _Llama2Tokenizer(args.tokenizer_model)
@@ -91,7 +92,16 @@ def build_tokenizer(args, **kwargs):
             args.tokenizer_prompt_format,
             args.special_tokens,
             args.image_tag_type,
+            args.force_system_message,
         )
+    elif args.tokenizer_type == "SFTTokenizer":
+        tokenizer = SFTTokenizer(
+            args.tokenizer_model,
+            args.sft_tokenizer_prompt_format, 
+        )
+    elif args.tokenizer_type == 'NullMultimodalTokenizer':
+        assert args.vocab_size is not None
+        tokenizer = _NullMultimodalTokenizer(args.vocab_size)
     else:
         raise NotImplementedError('{} tokenizer is not ' 'implemented.'.format(args.tokenizer_type))
 
@@ -118,19 +128,21 @@ def _vocab_size_with_padding(orig_vocab_size, args, logging_enabled=True):
     return after
 
 
-class _HuggingFaceTokenizer(MegatronTokenizer):
-    def __init__(self, pretrained_model_name_or_path, **kwargs):
+class _HuggingFaceTokenizer(MegatronLegacyTokenizer):
+    def __init__(self, pretrained_model_name_or_path, trust_remote_code=False, **kwargs):
         super().__init__(pretrained_model_name_or_path, **kwargs)
         try:
             import transformers
         except ImportError:
             raise EnvironmentError(
-                f"The transformers library must be installed to use huggingface_tokenizer_provider"
+                "The transformers library must be installed to use huggingface_tokenizer_provider"
             )
 
         # TODO(bnorick): download tokenizer once to lustre and use force offline to make sure all tasks read it from there
         self._tokenizer = transformers.AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=pretrained_model_name_or_path, **kwargs
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            trust_remote_code=trust_remote_code,
+            **kwargs
         )
         self._vocab = self._tokenizer.get_vocab()
         self._inv_vocab = {token_id: token for token, token_id in self._vocab.items()}
@@ -175,8 +187,16 @@ class _HuggingFaceTokenizer(MegatronTokenizer):
     def eod(self):
         return self._tokenizer.eos_token_id
 
+    @property
+    def bos(self):
+        return self._tokenizer.bos_token_id
 
-class _BertWordPieceTokenizer(MegatronTokenizer):
+    @property
+    def pad(self):
+        return self._tokenizer.pad_token_id
+
+
+class _BertWordPieceTokenizer(MegatronLegacyTokenizer):
     """Original BERT wordpiece tokenizer."""
 
     def __init__(self, vocab_file, lower_case=True, vocab_extra_ids=0):
@@ -312,7 +332,7 @@ class _BertWordPieceTokenizer(MegatronTokenizer):
         self._additional_special_tokens = value
 
 
-class _GPT2BPETokenizer(MegatronTokenizer):
+class _GPT2BPETokenizer(MegatronLegacyTokenizer):
     """Original GPT2 BPE tokenizer."""
 
     def __init__(self, vocab_file, merge_file):
@@ -346,7 +366,7 @@ class _GPT2BPETokenizer(MegatronTokenizer):
         return self.eod_id
 
 
-class _SentencePieceTokenizer(MegatronTokenizer):
+class _SentencePieceTokenizer(MegatronLegacyTokenizer):
     """SentencePieceTokenizer-Megatron wrapper"""
 
     def __init__(self, model_file, vocab_extra_ids=0):
@@ -645,7 +665,7 @@ PATTERN_TIKTOKEN = (
 PATTERN_TIKTOKEN_V2 = "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
 
 
-class CustomTikTokenizer(MegatronTokenizer):
+class CustomTikTokenizer(MegatronLegacyTokenizer):
     def __init__(
         self,
         path: str,
@@ -725,6 +745,10 @@ class CustomTikTokenizer(MegatronTokenizer):
     @property
     def eos(self) -> int:
         return self._eos_id
+    
+    @property
+    def pad(self) -> int:
+        return self._pad_id
 
     @property
     def unk(self) -> int:
@@ -784,7 +808,7 @@ class CustomTikTokenizer(MegatronTokenizer):
         return self._id_to_token
 
 
-class _NullTokenizer(MegatronTokenizer):
+class _NullTokenizer(MegatronLegacyTokenizer):
     def __init__(self, vocab_size):
         super().__init__(None, vocab_size=vocab_size)
         self._vocab_size_without_eod = int(vocab_size)
@@ -803,6 +827,66 @@ class _NullTokenizer(MegatronTokenizer):
             offsets.append(start_idx)
             start_idx += 1 + len(str(id_))
         return offsets
+
+    @property
+    def vocab_size(self):
+        return self._vocab_size_without_eod + 1
+
+    @property
+    def vocab(self):
+        raise NotImplementedError
+
+    @property
+    def inv_vocab(self):
+        raise NotImplementedError
+
+    @property
+    def cls(self):
+        return -1
+
+    @property
+    def sep(self):
+        return -1
+
+    @property
+    def mask(self):
+        return -1
+
+    @property
+    def eod(self):
+        return self._eod_id
+
+    @property
+    def additional_special_tokens_ids(self):
+        return None
+
+class _NullMultimodalTokenizer(MegatronLegacyTokenizer):
+    def __init__(self, vocab_size, image_token=None, image_token_id=None):
+        super().__init__(None, vocab_size=vocab_size)
+        self._vocab_size_without_eod = int(vocab_size)
+        self._eod_id = self._vocab_size_without_eod
+
+        from megatron.core.models.multimodal.llava_model import DEFAULT_IMAGE_TOKEN_INDEX, IMAGE_TOKEN
+        self._image_token = image_token if image_token is not None else IMAGE_TOKEN
+        self._image_token_id = image_token_id if image_token_id is not None else DEFAULT_IMAGE_TOKEN_INDEX
+
+    def tokenize(self, text):
+        return [int(x) for x in text.split(' ')]
+
+    def detokenize(self, ids):
+        text = [str(x) for x in ids]
+        return ' '.join(text)
+
+    def offsets(self, ids: list[int], text: str) -> list[int]:
+        offsets, start_idx = [], 0
+        for id_ in ids:
+            offsets.append(start_idx)
+            start_idx += 1 + len(str(id_))
+        return offsets
+
+    def convert_tokens_to_ids(self, tokens):
+        ids = [(int(t) if t != self._image_token else self._image_token_id) for t in tokens.split('  ')]
+        return ids if len(ids) > 1 else ids[0]
 
     @property
     def vocab_size(self):

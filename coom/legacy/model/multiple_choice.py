@@ -4,13 +4,11 @@
 
 import torch
 
-from megatron.training import get_args, print_rank_last
-from megatron.legacy.model.enums import AttnMaskType
-from megatron.legacy.model.bert_model import bert_extended_attention_mask, bert_position_ids
-from megatron.legacy.model.language_model import get_language_model
-from megatron.legacy.model.utils import get_linear_layer
-from megatron.legacy.model.utils import init_method_normal
-from megatron.legacy.model.utils import scaled_init_method_normal
+from coom.training import get_args, print_rank_last
+from coom.legacy.model.enums import AttnMaskType
+from coom.legacy.model.bert_model import bert_extended_attention_mask, bert_position_ids
+from coom.legacy.model.language_model import get_language_model
+from coom.legacy.model.utils import get_linear_layer
 from .module import MegatronModule
 
 

@@ -39,3 +39,36 @@ For more details or to get involved, please contact our team.
 ---
 
 **Note:** This framework is currently under active development. Performance metrics and benchmarks will be shared in upcoming releases.
+
+## Dev Installation
+
+### Deps
+```sh
+sudo apt-get update
+sudo apt-get install cmake python3-dev
+```
+
+```sh
+uv sync
+```
+
+Nemo has some breaking deps so install it with `uv pip ...`
+```sh
+uv pip install nemo_toolkit[all]
+```
+
+TE
+```
+https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/installation.html
+```
+
+### Dataset Makefile Copy
+Copy Makefile code from github to `megatron.core.datasets.Makefile`
+
+
+### Deps
+```
+cuda-driver==12.2
+cuda-toolkit==12.4
+cudnn==9.13.1.26-1 (12.x)
+```

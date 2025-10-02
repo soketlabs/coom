@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0,1 fabric run --devices 2 --accelerator gpu lightning_main.py

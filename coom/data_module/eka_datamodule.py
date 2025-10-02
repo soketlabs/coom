@@ -1,7 +1,8 @@
-from pathlib import Path
 import os
-from nemo.collections.llm import PreTrainingDataModule
+from pathlib import Path
+
 import nemo.collections.llm.gpt.data.pre_training as pre_training
+from nemo.collections.llm import PreTrainingDataModule
 
 
 def eka_validate_dataset_asset_accessibility(paths):

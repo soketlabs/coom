@@ -1,4 +1,4 @@
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
 
 """Megatron initialization."""
 import logging
@@ -24,12 +24,13 @@ from megatron.core.rerun_state_machine import (
 )
 from megatron.core.utils import get_te_version, is_te_min_version, is_torch_min_version
 from coom.legacy import fused_kernels
-from . import get_adlr_autoresume, get_args, get_tensorboard_writer
-from .arguments import parse_args, validate_args
-from .async_utils import init_persistent_async_worker
-from .checkpointing import load_args_from_checkpoint
-from .global_vars import set_global_variables
-from .yaml_arguments import validate_yaml
+from coom.training import get_adlr_autoresume, get_args, get_tensorboard_writer
+from coom.training import inprocess_restart
+from coom.training.arguments import parse_args, validate_args
+from coom.training.async_utils import init_persistent_async_worker
+from coom.training.checkpointing import load_args_from_checkpoint
+from coom.training.global_vars import set_global_variables
+from coom.training.yaml_arguments import validate_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,8 @@ def initialize_megatron(
     skip_mpu_initialization=False,
     get_embedding_ranks=None,
     get_position_embedding_ranks=None,
+    parsed_args=None,
+    store=None,
 ):
     """Set global variables, initialize distributed, and
     set autoresume and random seeds.
@@ -56,7 +59,10 @@ def initialize_megatron(
         assert torch.cuda.is_available(), "Megatron requires CUDA."
 
     # Parse arguments
-    args = parse_args(extra_args_provider, ignore_unknown_args)
+    if parsed_args is None:
+        args = parse_args(extra_args_provider, ignore_unknown_args)
+    else:
+        args = parsed_args
 
     # Prep for checkpoint conversion.
     if args.ckpt_convert_format is not None:
@@ -112,7 +118,7 @@ def initialize_megatron(
     def finish_mpu_init():
         args = get_args()
         # Pytorch distributed.
-        _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks)
+        _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks, store)
 
         # Random seeds for reproducibility.
         if args.rank == 0:
@@ -122,7 +128,14 @@ def initialize_megatron(
             args.data_parallel_random_init,
             args.te_rng_tracker,
             args.inference_rng_tracker,
+            use_cudagraphable_rng=args.enable_cuda_graph or args.external_cuda_graph,
         )
+
+        # Setup MoE aux loss scale value.
+        if args.num_experts is not None:
+            from megatron.core.transformer.moe.router import MoEAuxLossAutoScaler
+
+            MoEAuxLossAutoScaler.set_loss_scale(torch.ones(1, device=torch.cuda.current_device()))
 
     if skip_mpu_initialization:
         return None
@@ -281,7 +294,7 @@ def _initialize_tp_communicators():
         )
 
 
-def _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks):
+def _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks, store):
     """Initialize torch.distributed and core model parallel."""
     args = get_args()
 
@@ -307,15 +320,21 @@ def _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks):
         else:
             device_id = None
 
+        # Set to non-default stream for cudagraph capturing.
+        if args.external_cuda_graph:
+            torch.cuda.set_stream(torch.cuda.Stream())
+
         # Call the init process
         init_process_group_kwargs = {
             'backend': args.distributed_backend,
+            'store': store,
             'world_size': args.world_size,
             'rank': args.rank,
             'timeout': timedelta(minutes=args.distributed_timeout_minutes),
         }
 
         torch.distributed.init_process_group(**init_process_group_kwargs)
+        inprocess_restart.maybe_force_nccl_backend_init(device_id)
 
     # Set the tensor model-parallel, pipeline model-parallel, and
     # data-parallel communicators.
@@ -327,8 +346,8 @@ def _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks):
                 args.tensor_model_parallel_size,
                 args.pipeline_model_parallel_size,
                 args.virtual_pipeline_model_parallel_size,
-                args.pipeline_model_parallel_split_rank,
                 pipeline_model_parallel_comm_backend=args.pipeline_model_parallel_comm_backend,
+                use_sharp=args.use_sharp,
                 context_parallel_size=args.context_parallel_size,
                 hierarchical_context_parallel_sizes=args.hierarchical_context_parallel_sizes,
                 expert_model_parallel_size=args.expert_model_parallel_size,
@@ -337,10 +356,11 @@ def _initialize_distributed(get_embedding_ranks, get_position_embedding_ranks):
                 distributed_timeout_minutes=args.distributed_timeout_minutes,
                 nccl_communicator_config_path=args.nccl_communicator_config_path,
                 order='tp-cp-ep-dp-pp' if not args.use_tp_pp_dp_mapping else 'tp-cp-ep-pp-dp',
-                encoder_tensor_model_parallel_size=args.encoder_tensor_model_parallel_size,
-                encoder_pipeline_model_parallel_size=args.encoder_pipeline_model_parallel_size,
                 get_embedding_ranks=get_embedding_ranks,
                 get_position_embedding_ranks=get_position_embedding_ranks,
+                create_gloo_process_groups=args.enable_gloo_process_groups,
+                high_priority_stream_groups=args.high_priority_stream_groups,
+                sharp_enabled_group=args.sharp_enabled_group,
             )
             if args.rank == 0:
                 print(
@@ -363,7 +383,11 @@ def _init_autoresume():
 
 
 def _set_random_seed(
-    seed_, data_parallel_random_init=False, te_rng_tracker=False, inference_rng_tracker=False
+    seed_: int,
+    data_parallel_random_init: bool = False,
+    te_rng_tracker: bool = False,
+    inference_rng_tracker: bool = False,
+    use_cudagraphable_rng: bool = False,
 ):
     """Set random seed for reproducability."""
     if seed_ is not None and seed_ > 0:
@@ -377,7 +401,7 @@ def _set_random_seed(
         torch.manual_seed(seed)
         if torch.cuda.device_count() > 0:
             tensor_parallel.model_parallel_cuda_manual_seed(
-                seed, te_rng_tracker, inference_rng_tracker
+                seed, te_rng_tracker, inference_rng_tracker, use_cudagraphable_rng
             )
     else:
         raise ValueError("Seed ({}) should be a positive integer.".format(seed_))

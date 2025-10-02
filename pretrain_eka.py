@@ -13,7 +13,7 @@ from lossfunc import forward_step_func
 from checkpointing import save_distributed_checkpoint, load_distributed_checkpoint
 
 def main():
-    init_distributed(tensor_model_parallel_size=2)
+    init_distributed(tensor_model_parallel_size=1)
     model_parallel_cuda_manual_seed(123)
 
     model = model_provider()
@@ -29,7 +29,7 @@ def main():
     forward_backward_func = get_forward_backward_func()
 
     # Running the model for 5 iterations
-    for _ in range(5):
+    for _ in range(1):
         optim.zero_grad()
 
         losses_reduced = forward_backward_func(

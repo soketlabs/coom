@@ -9,3 +9,5 @@ msc:
 *.bin
 *.idx
 profiler_logs
+benchmark_cache_llama3_8b_fp8/
+lightning_logs
