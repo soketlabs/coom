@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click>=8.3.0",
     "datasets>=4.1.1",
+    "ftfy>=6.3.1",
     "lightning>=2.5.5",
     "megatron-core==0.15.0rc6",
     "packaging>=25.0",
@@ -14,6 +15,7 @@ dependencies = [
     "regex>=2025.9.18",
     "six>=1.17.0",
     "transformers>=4.56.2",
+    "wandb==0.19.10",
 ]
 
 [tool.uv]
