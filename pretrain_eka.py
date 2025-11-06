@@ -2,12 +2,12 @@ import torch
 from torch.optim import Adam
 
 from distributed_utils import init_distributed, destroy_distributed
-from model_provider import model_provider
 from megatron.core.pipeline_parallel.schedules import get_forward_backward_func
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 
 from coom.training.utils import print_rank_0
 
+from model_provider_eka import model_provider
 from dataloader import get_train_data_iterator
 from lossfunc import forward_step_func
 from checkpointing import save_distributed_checkpoint, load_distributed_checkpoint

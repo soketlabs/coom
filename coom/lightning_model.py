@@ -30,8 +30,8 @@ class EKALightningModel(pl.LightningModule):
         loss = self.forward(input_ids=input_ids, labels=labels)
         loss = loss[:, -1].mean()
 
-        self.log('train_loss', loss.item(), on_epoch=True, on_step=True)
-        print(loss)
+        self.log('train_loss', loss.item(), on_step=True)
+        # print(loss)
         # exit()
 
         return loss

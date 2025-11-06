@@ -1,5 +1,5 @@
 from distributed_utils import init_distributed, destroy_distributed
-from model_provider import model_provider
+from model_provider_eka import model_provider
 from coom.lightning_model import EKALightningModel
 from transformers import AutoTokenizer
 from datasets import Dataset
