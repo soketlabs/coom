@@ -1,5 +1,6 @@
+# import pytorch_lightning as pl
+import lightning as L
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from datasets import Dataset
 from lightning.pytorch.loggers import WandbLogger
@@ -15,6 +16,13 @@ from megatron.core.tokenizers import MegatronTokenizer
 # from megatron.training.tokenizer.tokenizer import _NullTokenizer
 from torch.utils.data import DataLoader
 
+from coom.callbacks.flops_callbacks import (
+    FLOPsMeasurementCallback,
+    MM_FLOPsMeasurementCallback,
+)
+from coom.callbacks.model_callbacks import PrecisionSummary, TimingCallback
+from coom.data_module.dataloader import get_train_data_iterator
+from coom.data_module.eka_data_module import EkaLightningDataModule
 from coom.data_module.eka_dataload import EkaPretrainDataLoader
 
 # ... (Keep remaining imports)
@@ -60,38 +68,53 @@ def main():
         cache_path="/projects/data/teams/coom_team/training/.cache/gpt_indices",
         random_seed=1000,
         seq_len=1024,
-        batch_size=2,
+        batch_size=16,
         shuffle=True,
         model_type="gpt",
     )
+
     if data_prep:
         data_module.data_build_save_tok(
             "wikitext",
             "/projects/data/teams/coom_team/training/data_prep/wikitext_train.jsonl",
-            "gpt2",
+            "mistralai/Mixtral-8x7B-v0.1",
         )
         print("data made into jsonl")
     else:
-        tokenizer = data_module.prepare_and_load_megatron_tokenizer()
-        data = data_module.get_train_data_iterator(tokenizer)
+        # === Wrap into LightningDataModule ===
+        lightning_data_module = EkaLightningDataModule(data_module)
 
-        lightning_model = EKALightningModel(model)
+        # Prepare data and build dataloader
+        lightning_data_module.prepare_data()
+        lightning_data_module.setup()
 
-        print(lightning_model)
-        wandb_logger = WandbLogger(
-            project="EKA_training_prototype_6th_Nov",
-            save_dir="/projects/data/teams/coom_team/training/.cache/wandb",
-            name="EKA_training_prototype_6th_Nov_run1",
-            log_model=False,
-        )
+        print(f"Tokenizer vocab_size: {lightning_data_module.vocab_size}")
+    # data = get_train_data_iterator()
+    lightning_model = EKALightningModel(model)
 
-        trainer = pl.Trainer(
-            max_epochs=500,
-            logger=wandb_logger,
-        )
-        trainer.fit(lightning_model, train_dataloaders=data)
+    # print(lightning_model)
+    wandb_logger = WandbLogger(
+        project="EKA_training_prototype_6th_Nov",
+        save_dir="/projects/data/teams/coom_team/training/.cache/wandb",
+        name="EKA_training_prototype_6th_Nov_run1",
+        log_model=False,
+    )
 
-        destroy_distributed()
+    callbacks = [
+        PrecisionSummary(),
+        TimingCallback(),
+        FLOPsMeasurementCallback(data_config=lightning_data_module),
+        MM_FLOPsMeasurementCallback(data_config=lightning_data_module),
+    ]
+    # for cb in callbacks:
+    #     assert isinstance(cb, pl.Callback), f"Bad callback: {type(cb)}"
+
+    trainer = L.Trainer(
+        max_epochs=500, logger=wandb_logger, callbacks=callbacks, precision="bf16-true"
+    )
+    trainer.fit(lightning_model, datamodule=lightning_data_module)
+
+    destroy_distributed()
 
 
 if __name__ == "__main__":

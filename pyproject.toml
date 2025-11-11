@@ -5,15 +5,21 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "accelerate>=1.11.0",
     "click>=8.3.0",
     "datasets>=4.1.1",
     "ftfy>=6.3.1",
-    "lightning>=2.5.5",
+    "lightning==2.5.2",
+    "loguru>=0.7.3",
     "megatron-core==0.15.0rc6",
     "packaging>=25.0",
+    "pip>=25.3",
+    "pybind11>=3.0.1",
     "pyyaml>=6.0.3",
     "regex>=2025.9.18",
+    "sentencepiece>=0.2.1",
     "six>=1.17.0",
+    "torch>=2.8.0",
     "transformers>=4.56.2",
     "wandb==0.19.10",
 ]

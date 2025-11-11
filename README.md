@@ -73,7 +73,7 @@ sudo chmod -R a+rX /cm/shared/cuda_dnn/9.14_12
 
 ```
 
-NCCL
+NCCL Install
 ```sh
 git clone https://github.com/NVIDIA/nccl.git
 cd nccl
@@ -120,4 +120,25 @@ prepend-path LD_LIBRARY_PATH $root/extras/CUPTI/lib64
 
 # The 'conflict' directive prevents multiple versions from being loaded simultaneously.
 conflict cuda
+```
+
+If nccl, cuda, python-dev already installed then:
+```
+module load gcc
+module load cuda
+module load nccl
+module load python/3.10
+```
+
+Install transformer engine:
+```
+uv pip install --no-build-isolation transformer_engine[pytorch]
+```
+
+## Apex Installation
+Install Apex from https://github.com/NVIDIA/apex
+using 
+```
+source <DIR>/.venv/bin/activate
+APEX_CPP_EXT=1 APEX_CUDA_EXT=1 python -m pip install -v --no-build-isolation .
 ```

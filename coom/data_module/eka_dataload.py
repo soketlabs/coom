@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 from datasets import load_dataset
+from loguru import logger
 from megatron.core.datasets.gpt_dataset import (
     GPTDataset,
     GPTDatasetConfig,
@@ -69,6 +70,7 @@ class EkaPretrainDataLoader:
         train_dataloader = DataLoader(
             train_ds, batch_size=self.batch_size, shuffle=self.shuffle
         )
+        logger.info(f"dataset : {len(train_dataloader)}")
 
         return train_dataloader
 
@@ -103,5 +105,9 @@ class EkaPretrainDataLoader:
 
                 json_object = {"text": document["text"]}
                 f.write(json.dumps(json_object) + "\n")
+        print("Tokenizer", tokenizer_name)
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-        tokenizer.save_pretrained(self.tokenizer_path)
+        tokenizer_path = f"{self.tokenizer_path}/{tokenizer_name}"
+        print("Tokenizer", tokenizer_path)
+        os.makedirs(tokenizer_path, exist_ok=True)
+        tokenizer.save_pretrained(tokenizer_path)
