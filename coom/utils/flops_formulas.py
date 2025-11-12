@@ -348,99 +348,99 @@ def transformer(config: FLOPSConfig):
     return total_flops
 
 
-def clip_vit_l(config: FLOPSConfig):
-    """Model FLOPs for CLIP ViT"""
+# def clip_vit_l(config: FLOPSConfig):
+#     """Model FLOPs for CLIP ViT"""
 
-    if config.img_seq_len is None:
-        config.img_seq_len = (config.img_h * config.img_w) / (
-            config.patch_dim * config.patch_dim
-        ) + config.class_token_len
-    return config.gbs * config.layers * config.hs * config.hs * config.img_seq_len * (
-        24 + (4 * config.img_seq_len / config.hs)
-    ) + (2 * config.gbs * config.hs * config.in_channels * config.img_h * config.img_w)
-
-
-def neva_projection(config: FLOPSConfig):
-    """Model FLOPs for NeVA Projection"""
-
-    # if config.gbs is None:
-    #     config.gbs = 1
-    # if config.img_seq_len is None:
-    #     config.img_seq_len = 256
-    # if config.ffn_hs is None:
-    #     config.ffn_hs = 4096
-    # if config.inp_s is None:
-    #     config.inp_s = 1024
-    # if config.hs is None:
-    #     config.hs = 4096
-    # if config.projector_type is None:
-    #     config.projector_type = "mlp"
-
-    if "mlp" in config.projector_type:
-        return (
-            6
-            * config.gbs
-            * config.img_seq_len
-            * config.ffn_hs
-            * (config.inp_s + config.hs)
-        )
-    elif config.projector_type == "affine":
-        return 6 * config.gbs * config.img_seq_len * config.inp_s * config.hs
-    else:
-        raise ValueError(
-            f"NeVA Projections FLOPs calculator only supports 'mlp', 'mcore_mlp'"
-            f" or 'affine' projector_type but found {config.projector_type}"
-        )
+#     if config.img_seq_len is None:
+#         config.img_seq_len = (config.img_h * config.img_w) / (
+#             config.patch_dim * config.patch_dim
+#         ) + config.class_token_len
+#     return config.gbs * config.layers * config.hs * config.hs * config.img_seq_len * (
+#         24 + (4 * config.img_seq_len / config.hs)
+#     ) + (2 * config.gbs * config.hs * config.in_channels * config.img_h * config.img_w)
 
 
-def flux(config: FLOPSConfig):
-    """Model FLOPs for FLUX"""
+# def neva_projection(config: FLOPSConfig):
+#     """Model FLOPs for NeVA Projection"""
 
-    hs = config.hs
-    seq_len = config.model_channels + config.inp_s
-    base_factor = 6 * config.gbs  # common multiplier for most terms
+#     # if config.gbs is None:
+#     #     config.gbs = 1
+#     # if config.img_seq_len is None:
+#     #     config.img_seq_len = 256
+#     # if config.ffn_hs is None:
+#     #     config.ffn_hs = 4096
+#     # if config.inp_s is None:
+#     #     config.inp_s = 1024
+#     # if config.hs is None:
+#     #     config.hs = 4096
+#     # if config.projector_type is None:
+#     #     config.projector_type = "mlp"
 
-    # Joint layer computations
-    joint_layer_flops = (
-        base_factor
-        * config.layers[0]
-        * (
-            10 * hs * hs  # hidden size operations
-            + 2
-            * hs
-            * (config.model_channels + config.inp_s)
-            * (1 + hs * 7)  # channel and context joint attention
-            + 2 * (config.model_channels + config.inp_s) * hs  # final projection
-        )
-    )
+#     if "mlp" in config.projector_type:
+#         return (
+#             6
+#             * config.gbs
+#             * config.img_seq_len
+#             * config.ffn_hs
+#             * (config.inp_s + config.hs)
+#         )
+#     elif config.projector_type == "affine":
+#         return 6 * config.gbs * config.img_seq_len * config.inp_s * config.hs
+#     else:
+#         raise ValueError(
+#             f"NeVA Projections FLOPs calculator only supports 'mlp', 'mcore_mlp'"
+#             f" or 'affine' projector_type but found {config.projector_type}"
+#         )
 
-    # Single layer computations
-    single_layer_flops = (
-        base_factor
-        * config.layers[1]
-        * seq_len
-        * hs
-        * (
-            3  # linear Y
-            + 1  # Modulation
-            + 4 * hs  # Linear computations
-            + (3 * hs + 2 * seq_len)  # attention operations
-            + 5 * hs  # feed-forward
-            + 1  # Modulation
-        )
-    )
 
-    # Embedding and projection layers
-    other_flops = base_factor * (
-        config.inp_s * config.in_channels * hs  # image embedding
-        + config.inp_s * hs * config.model_channels  # text embedding
-        + config.vec_in_dim * hs
-        + hs * hs  # vector embedding
-        + 2 * (config.model_channels * hs + hs * hs)  # guidance + timestep embedding
-        + (config.inp_s * config.in_channels * hs) / config.gbs  # final projection
-    )
+# def flux(config: FLOPSConfig):
+#     """Model FLOPs for FLUX"""
 
-    return joint_layer_flops + single_layer_flops + other_flops
+#     hs = config.hs
+#     seq_len = config.model_channels + config.inp_s
+#     base_factor = 6 * config.gbs  # common multiplier for most terms
+
+#     # Joint layer computations
+#     joint_layer_flops = (
+#         base_factor
+#         * config.layers[0]
+#         * (
+#             10 * hs * hs  # hidden size operations
+#             + 2
+#             * hs
+#             * (config.model_channels + config.inp_s)
+#             * (1 + hs * 7)  # channel and context joint attention
+#             + 2 * (config.model_channels + config.inp_s) * hs  # final projection
+#         )
+#     )
+
+#     # Single layer computations
+#     single_layer_flops = (
+#         base_factor
+#         * config.layers[1]
+#         * seq_len
+#         * hs
+#         * (
+#             3  # linear Y
+#             + 1  # Modulation
+#             + 4 * hs  # Linear computations
+#             + (3 * hs + 2 * seq_len)  # attention operations
+#             + 5 * hs  # feed-forward
+#             + 1  # Modulation
+#         )
+#     )
+
+#     # Embedding and projection layers
+#     other_flops = base_factor * (
+#         config.inp_s * config.in_channels * hs  # image embedding
+#         + config.inp_s * hs * config.model_channels  # text embedding
+#         + config.vec_in_dim * hs
+#         + hs * hs  # vector embedding
+#         + 2 * (config.model_channels * hs + hs * hs)  # guidance + timestep embedding
+#         + (config.inp_s * config.in_channels * hs) / config.gbs  # final projection
+#     )
+
+#     return joint_layer_flops + single_layer_flops + other_flops
 
 
 def deepseekv3(config: FLOPSConfig):
@@ -578,54 +578,54 @@ def _non_mla_attn_layer_flops(config: FLOPSConfig):
     )
 
 
-def _mamba_layer_flops(config: FLOPSConfig):
-    """Model FLOPs for Mamba layer. We ignore part of the flops of scan because the
-    chunk size is not known from model config."""
-    assert config.mamba_state_dim is not None
-    assert config.mamba_head_dim is not None
+# def _mamba_layer_flops(config: FLOPSConfig):
+#     """Model FLOPs for Mamba layer. We ignore part of the flops of scan because the
+#     chunk size is not known from model config."""
+#     assert config.mamba_state_dim is not None
+#     assert config.mamba_head_dim is not None
 
-    if config.mamba_num_heads:
-        nheads = config.mamba_num_heads
-    else:
-        nheads = 2 * config.hs // config.mamba_head_dim  # default expand is 2
-    d_in = nheads * config.mamba_head_dim
-    return (
-        (
-            6
-            * config.gbs
-            * config.enc_seq_len
-            * config.hs
-            * (2 * d_in + 2 * config.mamba_num_groups * config.mamba_state_dim + nheads)
-        )
-        + (3 * 2 * config.gbs * config.enc_seq_len * d_in * config.mamba_state_dim)
-        + (6 * config.gbs * config.enc_seq_len * d_in * config.hs)
-    )
-
-
-def _hybrid_model_flops(config: FLOPSConfig):
-    """Model FLOPs for hybrid model"""
-    assert config.is_hybrid_model == True
-    assert config.hybrid_override_pattern is not None
-
-    num_attn_layers, num_mamba_layers, num_mlp_layers = 0, 0, 0
-    for c in config.hybrid_override_pattern:
-        if c == "M":
-            num_mamba_layers += 1
-        elif c == "-":
-            num_mlp_layers += 1
-        elif c == "*":
-            num_attn_layers += 1
-    return (
-        num_attn_layers * _non_mla_attn_layer_flops(config)
-        + num_mamba_layers * _mamba_layer_flops(config)
-        + num_mlp_layers * _nemotronh_mlp_layer_flops(config)
-        + 6 * config.gbs * config.enc_seq_len * config.hs * config.vocab_size
-    )
+#     if config.mamba_num_heads:
+#         nheads = config.mamba_num_heads
+#     else:
+#         nheads = 2 * config.hs // config.mamba_head_dim  # default expand is 2
+#     d_in = nheads * config.mamba_head_dim
+#     return (
+#         (
+#             6
+#             * config.gbs
+#             * config.enc_seq_len
+#             * config.hs
+#             * (2 * d_in + 2 * config.mamba_num_groups * config.mamba_state_dim + nheads)
+#         )
+#         + (3 * 2 * config.gbs * config.enc_seq_len * d_in * config.mamba_state_dim)
+#         + (6 * config.gbs * config.enc_seq_len * d_in * config.hs)
+#     )
 
 
-def nemotronh(config: FLOPSConfig):
-    """Model FLOPs for NemotronH"""
-    return _hybrid_model_flops(config)
+# def _hybrid_model_flops(config: FLOPSConfig):
+#     """Model FLOPs for hybrid model"""
+#     assert config.is_hybrid_model == True
+#     assert config.hybrid_override_pattern is not None
+
+#     num_attn_layers, num_mamba_layers, num_mlp_layers = 0, 0, 0
+#     for c in config.hybrid_override_pattern:
+#         if c == "M":
+#             num_mamba_layers += 1
+#         elif c == "-":
+#             num_mlp_layers += 1
+#         elif c == "*":
+#             num_attn_layers += 1
+#     return (
+#         num_attn_layers * _non_mla_attn_layer_flops(config)
+#         + num_mamba_layers * _mamba_layer_flops(config)
+#         + num_mlp_layers * _nemotronh_mlp_layer_flops(config)
+#         + 6 * config.gbs * config.enc_seq_len * config.hs * config.vocab_size
+#     )
+
+
+# def nemotronh(config: FLOPSConfig):
+#     """Model FLOPs for NemotronH"""
+#     return _hybrid_model_flops(config)
 
 
 def attention_flops_calculator(
@@ -691,68 +691,68 @@ def loss_flops_calculator(
     return (seqlen * hidden_size * vocab_size) * 6
 
 
-def gpt_oss_flops_calculator(
-    gbs,
-    num_layers,
-    seqlen,
-    hidden_size,
-    num_attention_heads,
-    num_query_groups,
-    moe_ffn_hidden_size,
-    moe_router_topk,
-    vocab_size,
-    kv_channels: Optional[int] = None,
-    swa_window_size: int = 128,
-    window_attn_skip_freq: Optional[int] = 2,
-):
-    """Calculate the flops for the GPT-OSS model"""
-    flops = 0
-    for i in range(num_layers):
-        if i % window_attn_skip_freq == 0:
-            flops += attention_flops_calculator(
-                seqlen,
-                hidden_size,
-                num_attention_heads,
-                num_query_groups,
-                kv_channels,
-                is_swa=False,
-            )
-        else:
-            flops += attention_flops_calculator(
-                seqlen,
-                hidden_size,
-                num_attention_heads,
-                num_query_groups,
-                kv_channels,
-                is_swa=True,
-                swa_window_size=swa_window_size,
-            )
-        flops += moe_mlp_flops_calculator(
-            seqlen,
-            hidden_size,
-            moe_ffn_hidden_size,
-            moe_router_topk,
-        )
-    flops += loss_flops_calculator(seqlen, hidden_size, vocab_size)
-    flops *= gbs
-    return flops
+# def gpt_oss_flops_calculator(
+#     gbs,
+#     num_layers,
+#     seqlen,
+#     hidden_size,
+#     num_attention_heads,
+#     num_query_groups,
+#     moe_ffn_hidden_size,
+#     moe_router_topk,
+#     vocab_size,
+#     kv_channels: Optional[int] = None,
+#     swa_window_size: int = 128,
+#     window_attn_skip_freq: Optional[int] = 2,
+# ):
+#     """Calculate the flops for the GPT-OSS model"""
+#     flops = 0
+#     for i in range(num_layers):
+#         if i % window_attn_skip_freq == 0:
+#             flops += attention_flops_calculator(
+#                 seqlen,
+#                 hidden_size,
+#                 num_attention_heads,
+#                 num_query_groups,
+#                 kv_channels,
+#                 is_swa=False,
+#             )
+#         else:
+#             flops += attention_flops_calculator(
+#                 seqlen,
+#                 hidden_size,
+#                 num_attention_heads,
+#                 num_query_groups,
+#                 kv_channels,
+#                 is_swa=True,
+#                 swa_window_size=swa_window_size,
+#             )
+#         flops += moe_mlp_flops_calculator(
+#             seqlen,
+#             hidden_size,
+#             moe_ffn_hidden_size,
+#             moe_router_topk,
+#         )
+#     flops += loss_flops_calculator(seqlen, hidden_size, vocab_size)
+#     flops *= gbs
+#     return flops
 
 
-def gpt_oss(config: FLOPSConfig):
-    """Model FLOPs for GPT-OSS"""
-    return gpt_oss_flops_calculator(
-        gbs=config.gbs,
-        num_layers=config.layers,
-        seqlen=config.enc_seq_len,
-        hidden_size=config.hs,
-        num_attention_heads=config.attention_heads,
-        num_query_groups=config.query_groups,
-        moe_ffn_hidden_size=config.moe_ffn_hidden_size,
-        moe_router_topk=config.moe_router_topk,
-        vocab_size=config.vocab_size,
-        kv_channels=config.kv_channels,
-        swa_window_size=config.window_size[0]
-        if config.window_size is not None
-        else 128,
-        window_attn_skip_freq=config.window_attn_skip_freq,
-    )
+# def gpt_oss(config: FLOPSConfig):
+#     """Model FLOPs for GPT-OSS"""
+#     return gpt_oss_flops_calculator(
+#         gbs=config.gbs,
+#         num_layers=config.layers,
+#         seqlen=config.enc_seq_len,
+#         hidden_size=config.hs,
+#         num_attention_heads=config.attention_heads,
+#         num_query_groups=config.query_groups,
+#         moe_ffn_hidden_size=config.moe_ffn_hidden_size,
+#         moe_router_topk=config.moe_router_topk,
+#         vocab_size=config.vocab_size,
+#         kv_channels=config.kv_channels,
+#         swa_window_size=config.window_size[0]
+#         if config.window_size is not None
+#         else 128,
+#         window_attn_skip_freq=config.window_attn_skip_freq,
+#     )

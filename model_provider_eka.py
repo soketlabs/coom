@@ -1,8 +1,13 @@
 from typing import Optional
 
 import torch
+import torch.nn.functional as F
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
-from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
+from megatron.core.models.gpt.gpt_layer_specs import (
+    get_gpt_layer_local_spec,
+    get_gpt_layer_with_transformer_engine_spec,
+)
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.dot_product_attention import DotProductAttention
@@ -10,11 +15,16 @@ from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.torch_norm import WrappedTorchNorm
-from megatron.core.transformer.transformer_config import MLATransformerConfig
+from megatron.core.transformer.transformer_config import (
+    MLATransformerConfig,
+    ModelParallelConfig,
+)
 from megatron.core.transformer.transformer_layer import (
     TransformerLayer,
     TransformerLayerSubmodules,
 )
+
+from coom.training.initialize import initialize_megatron
 
 try:
     from megatron.core.extensions.transformer_engine import (
@@ -136,107 +146,45 @@ def get_transformer_layer_spec():
 def model_provider():
     """Build Mixtral-style model configuration using Megatron-Core primitives (1-GPU version)."""
 
-    # transformer_layer_spec = get_gpt_layer_local_spec(
-    #     num_experts=64,
-    #     moe_grouped_gemm=False,
-    #     qk_layernorm=True,
-    #     multi_latent_attention=False,
-    #     fp8=None,
-    #     moe_use_legacy_grouped_gemm=False,
-    #     normalization="RMSNorm",
-    #     qk_l2_norm=False,
-    #     use_kitchen=False,
-    # )
-
-    # transformer_config = MLATransformerConfig(
-    #     num_layers=14,
-    #     num_moe_experts=64,
-    #     num_attention_heads=128,
-    #     hidden_size=7168,
-    #     moe_ffn_hidden_size=2048,
-    #     use_cpu_initialization=True,
-    #     pipeline_dtype=torch.bfloat16,
-    #     normalization="RMSNorm",
-    #     attention_dropout=0.0,
-    #     hidden_dropout=0.0,
-    #     tensor_model_parallel_size=1,
-    #     pipeline_model_parallel_size=2,
-    #     expert_model_parallel_size=2,
-    #     sequence_parallel=False,
-    #     init_model_with_meta_device=True,
-    #     moe_router_topk=8,
-    #     moe_router_num_groups=8,
-    #     moe_router_group_topk=4,
-    #     moe_router_topk_scaling_factor=2.5,
-    #     moe_router_score_function="sigmoid",
-    #     moe_router_enable_expert_bias=True,
-    #     moe_router_bias_update_rate=1e-3,
-    #     moe_router_dtype=torch.float32,
-    #     moe_router_pre_softmax=True,
-    #     moe_router_load_balancing_type="seq_aux_loss",
-    #     moe_enable_deepep=False,
-    #     moe_aux_loss_coeff=1e-4,
-    #     moe_permute_fusion=True,
-    #     moe_shared_expert_intermediate_size=2048,
-    #     q_lora_rank=1536,
-    #     kv_lora_rank=512,
-    #     qk_head_dim=128,
-    #     qk_pos_emb_head_dim=64,
-    #     v_head_dim=128,
-    #     rotary_scaling_factor=40,
-    #     mscale=1.0,
-    #     mscale_all_dim=1.0,
-    #     num_query_groups=128,
-    #     max_position_embeddings=4096,
-    #     rotary_base=10000,
-    #     qk_layernorm=True,
-    #     add_bias_linear=False,
-    #     moe_grouped_gemm=False,
-    # )
-
-    # model = EKAModel(
-    #     config=transformer_config,
-    #     transformer_layer_spec=transformer_layer_spec,
-    #     vocab_size=129280,
-    #     max_sequence_length=4096,
-    # )
-    transformer_layer_spec = get_gpt_layer_local_spec(
-        num_experts=2,  # Match config
-        moe_grouped_gemm=False,
+    transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
+        num_experts=2,
+        moe_grouped_gemm=False,  # Often False for this spec
         qk_layernorm=True,
-        multi_latent_attention=False,  # True, ### Error if True: TypeError: DotProductAttention.__init__() got an unexpected keyword argument 'k_channels'
+        multi_latent_attention=True,
         fp8=None,
         moe_use_legacy_grouped_gemm=False,
-        normalization="RMSNorm",
+        # normalization="RMSNorm",
         qk_l2_norm=False,
         use_kitchen=False,
     )
+    # ProcessGroupCollection(expt_tp=2, ep=2)
 
     # ~8B total, ~1B active parameters
+
     transformer_config = MLATransformerConfig(
-        # === Core Transformer ===
-        num_layers=8,  # total transformer depth
-        num_moe_experts=2,  # ✅ only 2 total experts
+        tensor_model_parallel_size=2,
+        pipeline_model_parallel_size=2,
+        expert_model_parallel_size=2,  # EP size is 4 across 2 pipelines stages maybe?
+        context_parallel_size=1,
+        expert_tensor_parallel_size=1,
+        pipeline_dtype=torch.bfloat16,
+        sequence_parallel=True,
+        num_layers=8,
+        num_moe_experts=2,
         num_attention_heads=8,
         hidden_size=4096,
-        moe_ffn_hidden_size=14336,  # ~3.5× hidden size
+        ffn_hidden_size=2048,
+        moe_ffn_hidden_size=14336,
         use_cpu_initialization=True,
-        pipeline_dtype=torch.bfloat16,
         normalization="RMSNorm",
         layernorm_epsilon=1e-6,
         attention_dropout=0.0,
         hidden_dropout=0.0,
-        # === Parallelism ===
-        tensor_model_parallel_size=1,  # no tensor slicing (simple setup)
-        pipeline_model_parallel_size=2,  # single pipeline stage
-        expert_model_parallel_size=4,  # ✅ split 2 experts across 2 GPUs
-        context_parallel_size=1,
-        moe_extended_tp=1,
-        sequence_parallel=False,
         init_model_with_meta_device=False,
         # === Mixture-of-Experts ===
-        moe_router_topk=1,  # ✅ only 1 expert active per token
-        moe_router_num_groups=1,  # single group routing (since only 2 experts)
+        moe_router_topk=1,
+        moe_layer_freq=2,
+        moe_router_num_groups=1,
         moe_router_group_topk=1,
         moe_router_topk_scaling_factor=1.0,
         moe_router_score_function="sigmoid",
@@ -245,31 +193,39 @@ def model_provider():
         moe_router_dtype=torch.float32,
         moe_router_pre_softmax=True,
         moe_router_load_balancing_type="seq_aux_loss",
-        # moe_enable_deepep=True, # error : assert self.tp_size * self.ep_size > 1, "Flex token dispatcher requires TPxEP > 1"
+        # moe_enable_deepep=True,
+        # moe_deepep_num_sms=10,
         moe_aux_loss_coeff=1e-4,
         moe_permute_fusion=True,
-        moe_shared_expert_intermediate_size=2048,  # can lower if memory constrained
+        moe_shared_expert_intermediate_size=2048,
         # === Attention / LoRA ===
         q_lora_rank=1024,
         kv_lora_rank=256,
         qk_head_dim=128,
-        kv_channels=128,
+        # kv_channels should be the same as qk_head_dim * num_query_groups if GQA
+        kv_channels=8,  # 128, prev now changed according to deepseek
         qk_pos_emb_head_dim=64,
         v_head_dim=128,
         rotary_scaling_factor=40,
         mscale=1.0,
         mscale_all_dim=1.0,
-        num_query_groups=8,  # same as heads (1:1 GQA)
+        num_query_groups=8,
         # === Positional Embeddings ===
         max_position_embeddings=4096,
         rotary_base=10000,
         qk_layernorm=True,
-        add_bias_linear=False,  # [rank0]:     assert config.add_bias_linear == False, "bias is not supported in the shared experts, "[rank0]: AssertionError: bias is not supported in the shared experts,  when instantiating SharedExpertMLP when instantiating MoELayer when instantiating TransformerLayer
+        add_bias_linear=False,  # Revert to False for shared experts
         moe_grouped_gemm=True,
         bf16=True,
-        # moe_token_dispatcher_type="flex", # error : assert self.tp_size * self.ep_size > 1, "Flex token dispatcher requires TPxEP > 1"
+        # moe_token_dispatcher_type="flex",
+        multi_latent_attention=True,
+        # Activation for Swiglu
+        gated_linear_unit=True,
+        activation_func=F.silu,
+        # bias_activation_fusion=True,
+        use_te_activation_func=True,
+        # cache_mla_latents=True,  # uses flash attn if available
     )
-
     model = EKAModel(
         config=transformer_config,
         transformer_layer_spec=transformer_layer_spec,
@@ -279,6 +235,9 @@ def model_provider():
 
     print("Model initialized for single-GPU inference/training.")
     print(model)
+    print(model.decoder.layers[0].mlp.experts.local_experts[0].activation_func)
+    print(model.decoder.layers[0].mlp.config.gated_linear_unit)
+
     model.to(torch.device("cuda"))
     print("✅ Model initialized for inference/training.")
 

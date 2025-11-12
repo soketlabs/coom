@@ -30,9 +30,9 @@ __all__ = ["FLOPsMeasurementCallback", "MM_FLOPsMeasurementCallback"]
 
 _model_flops_map = {
     "deepseekv3": flops_formulas.deepseekv3,
-    "hf_clip_vit_l": flops_formulas.clip_vit_l,
-    "neva_projection": flops_formulas.neva_projection,
-    "flux": flops_formulas.flux,
+    # "hf_clip_vit_l": flops_formulas.clip_vit_l,
+    # "neva_projection": flops_formulas.neva_projection,
+    # "flux": flops_formulas.flux,
 }
 
 
@@ -238,45 +238,45 @@ class MM_FLOPsMeasurementCallback(Callback):
             # moe_aux_loss_coeff=1e-4,
         )
 
-        # ---- HF CLIP ViT-L ----
-        hf_clip_vit_l_cfg = flops_formulas.FLOPSConfig(
-            gbs=gbs,
-            layers=24,
-            hs=1024,
-            img_seq_len=257,  # 224x224 / 14x14 + cls token
-            img_h=224,
-            img_w=224,
-            patch_dim=14,
-            in_channels=3,
-            class_token_len=1,
-        )
+        # # ---- HF CLIP ViT-L ----
+        # hf_clip_vit_l_cfg = flops_formulas.FLOPSConfig(
+        #     gbs=gbs,
+        #     layers=24,
+        #     hs=1024,
+        #     img_seq_len=257,  # 224x224 / 14x14 + cls token
+        #     img_h=224,
+        #     img_w=224,
+        #     patch_dim=14,
+        #     in_channels=3,
+        #     class_token_len=1,
+        # )
 
-        # ---- NEVA Projection ----
-        neva_projection_cfg = flops_formulas.FLOPSConfig(
-            gbs=gbs,
-            projector_type="mlp",
-            ffn_hs=4096,
-            inp_s=1024,
-            hs=4096,
-            img_seq_len=256,
-        )
+        # # ---- NEVA Projection ----
+        # neva_projection_cfg = flops_formulas.FLOPSConfig(
+        #     gbs=gbs,
+        #     projector_type="mlp",
+        #     ffn_hs=4096,
+        #     inp_s=1024,
+        #     hs=4096,
+        #     img_seq_len=256,
+        # )
 
-        # ---- Flux ---- (optional multimodal joint encoder)
-        flux_cfg = flops_formulas.FLOPSConfig(
-            gbs=gbs,
-            layers=[4, 4],
-            hs=2048,
-            model_channels=128,
-            inp_s=4096,
-            in_channels=3,
-            vec_in_dim=1024,
-        )
+        # # ---- Flux ---- (optional multimodal joint encoder)
+        # flux_cfg = flops_formulas.FLOPSConfig(
+        #     gbs=gbs,
+        #     layers=[4, 4],
+        #     hs=2048,
+        #     model_channels=128,
+        #     inp_s=4096,
+        #     in_channels=3,
+        #     vec_in_dim=1024,
+        # )
 
         self.flops_config_dict = {
             "deepseekv3": deepseek_cfg,
-            "hf_clip_vit_l": hf_clip_vit_l_cfg,
-            "neva_projection": neva_projection_cfg,
-            "flux": flux_cfg,
+            # "hf_clip_vit_l": hf_clip_vit_l_cfg,
+            # "neva_projection": neva_projection_cfg,
+            # "flux": flux_cfg,
         }
 
         self.avg_train_step_time = 0.0
