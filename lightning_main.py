@@ -1,9 +1,14 @@
 # import pytorch_lightning as pl
+import os
+
 import lightning as L
 import numpy as np
 import torch
 from datasets import Dataset
+from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.strategies import DDPStrategy
+from loguru import logger
 from megatron.core.datasets.gpt_dataset import (
     GPTDataset,
     GPTDatasetConfig,
@@ -16,6 +21,7 @@ from megatron.core.tokenizers import MegatronTokenizer
 # from megatron.training.tokenizer.tokenizer import _NullTokenizer
 from torch.utils.data import DataLoader
 
+from coom.callbacks.checkpoint_callback import AsyncModelCheckpoint
 from coom.callbacks.flops_callbacks import (
     FLOPsMeasurementCallback,
     MM_FLOPsMeasurementCallback,
@@ -24,6 +30,7 @@ from coom.callbacks.model_callbacks import PrecisionSummary, TimingCallback
 from coom.data_module.dataloader import get_train_data_iterator
 from coom.data_module.eka_data_module import EkaLightningDataModule
 from coom.data_module.eka_dataload import EkaPretrainDataLoader
+from coom.lightning.checkpoint_io import MegatronPartitionedCheckpointIO
 
 # ... (Keep remaining imports)
 from coom.lightning_model import EKALightningModel
@@ -53,6 +60,8 @@ from model_provider_eka import model_provider
 def main():
     init_distributed()
     model_parallel_cuda_manual_seed(123)
+    # num_nodes = int(os.getenv("SLURM_NNODES"))
+    # logger.info(f"num_nodes: {num_nodes}")
 
     # tokenizer = AutoTokenizer.from_pretrained("soketlabs/pragna-1b")
 
@@ -100,17 +109,45 @@ def main():
         log_model=False,
     )
 
+    ckpt_dir_path = "/projects/data/teams/coom_team/training/checkpoint_path/eka_train_prototype_13_11_25"
+    os.makedirs(ckpt_dir_path, exist_ok=True)
     callbacks = [
         PrecisionSummary(),
         TimingCallback(),
         FLOPsMeasurementCallback(data_config=lightning_data_module),
         MM_FLOPsMeasurementCallback(data_config=lightning_data_module),
+        # ModelCheckpoint(
+        #     every_n_train_steps=2,  # Corresponds to `save_steps`
+        #     save_top_k=10,  # Corresponds to `save_total_limit`
+        #     mode="max",  # Keep the 10 checkpoints with the highest step numbers
+        #     dirpath=ckpt_dir_path,  # Directory to save checkpoints
+        #     filename="eka",
+        #     # filename="dhvani-{epoch}-{step}",
+        #     save_last=True,  # Optionally, save a 'last.ckpt' as well
+        #     monitor="step",
+        #     verbose=True,
+        #     save_weights_only=False,
+        #     train_time_interval=10,
+        #     save_on_train_epoch_end=False,
+        # ),
+        AsyncModelCheckpoint(
+            dirpath=ckpt_dir_path,
+            filename="epoch={epoch}-step={step}",
+            save_interval=100,
+            save_last=True,
+            save_ema=True,
+        ),
     ]
     # for cb in callbacks:
     #     assert isinstance(cb, pl.Callback), f"Bad callback: {type(cb)}"
 
     trainer = L.Trainer(
-        max_epochs=500, logger=wandb_logger, callbacks=callbacks, precision="bf16-true"
+        max_epochs=500,
+        logger=wandb_logger,
+        callbacks=callbacks,
+        precision="bf16-true",
+        # num_nodes=num_nodes,
+        devices=8,
     )
     trainer.fit(lightning_model, datamodule=lightning_data_module)
 
