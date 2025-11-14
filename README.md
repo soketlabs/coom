@@ -142,3 +142,28 @@ using
 source <DIR>/.venv/bin/activate
 APEX_CPP_EXT=1 APEX_CUDA_EXT=1 python -m pip install -v --no-build-isolation .
 ```
+
+
+## issue Megatron model not getting sharded according to startegy
+## using nemo seperate sharding technique for checkpointing
+## trying out nemo once
+## facing checkpointing issue at
+```
+          )
+        except Exception as e:
+            rank_zero_warn(
+                f"Failed to get MCore save strategy: {e}. Falling back to synchronous if possible."
+            )
+            the model is not sharded
+```
+
+### tried sharding the model using  from gptmodel
+```
+self.model.sharded_state_dict(prefix=prefix, *args, **kwargs)
+```
+### facing issue as 
+```
+WARNING:megatron.core.dist_checkpointing.mapping:ShardedTensor.prepend_axis_num greater than 0 is deprecated. In Megatron-Core this can be prevented by setting sharded_state_dict metadata['singleton_local_shards'] to True.
+```
+and activation cant be sharded
+.... tring nemo techniques..

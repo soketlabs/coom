@@ -30,7 +30,6 @@ from coom.callbacks.model_callbacks import PrecisionSummary, TimingCallback
 from coom.data_module.dataloader import get_train_data_iterator
 from coom.data_module.eka_data_module import EkaLightningDataModule
 from coom.data_module.eka_dataload import EkaPretrainDataLoader
-from coom.lightning.checkpoint_io import MegatronPartitionedCheckpointIO
 
 # ... (Keep remaining imports)
 from coom.lightning_model import EKALightningModel
@@ -135,7 +134,7 @@ def main():
             filename="epoch={epoch}-step={step}",
             save_interval=100,
             save_last=True,
-            save_ema=True,
+            async_save=True,
         ),
     ]
     # for cb in callbacks:

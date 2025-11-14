@@ -1,7 +1,9 @@
 from typing import Literal, Optional
-from megatron.core.transformer.transformer_config import TransformerConfig
+
 from megatron.core.models.gpt.gpt_model import GPTModel
 from megatron.core.transformer.spec_utils import ModuleSpec
+from megatron.core.transformer.transformer_config import TransformerConfig
+
 
 class EKAModel(GPTModel):
     def __init__(
@@ -15,7 +17,7 @@ class EKAModel(GPTModel):
         fp16_lm_cross_entropy: bool = False,
         parallel_output: bool = True,
         share_embeddings_and_output_weights: bool = False,
-        position_embedding_type: Literal['learned_absolute', 'rope'] = 'rope',
+        position_embedding_type: Literal["learned_absolute", "rope"] = "rope",
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
         rope_scaling: bool = False,
