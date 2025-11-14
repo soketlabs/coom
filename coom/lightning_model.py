@@ -1,7 +1,10 @@
+from typing import Any, Dict
+
 import lightning as L
 import pytorch_lightning as pl
 import torch
 from loguru import logger
+from megatron.core.dist_checkpointing.mapping import ShardedTensor
 
 from coom.model.transformer import EKAModel
 
@@ -29,6 +32,25 @@ class EKALightningModel(L.LightningModule):
             attention_mask=attention_mask,
             labels=labels,
         )
+
+    # --- Add this method to expose the Megatron Core functionality ---
+    # def sharded_state_dict(self, prefix: str = "", *args, **kwargs) -> Dict[str, Any]:
+    #     """
+    #     Exposes the underlying EKAModel's sharded_state_dict method to the Lightning Callback
+    #      and updates metadata to comply with modern MCore requirements.
+    #     """
+    #     ShardedTensor.prepend_axis_num = 2
+    #     sharded_dict = self.model.sharded_state_dict(prefix=prefix, *args, **kwargs)
+
+    #     # --- FIX: Add this logic to resolve the deprecation warning ---
+    #     if "metadata" not in sharded_dict:
+    #         sharded_dict["metadata"] = {}
+
+    #     # This prevents the deprecated prepend_axis_num issue
+    #     sharded_dict["metadata"]["singleton_local_shards"] = True
+    #     # -----------------------------------------------------------
+
+    #     return sharded_dict
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-5, eps=1e-8)
